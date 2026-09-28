@@ -1,510 +1,317 @@
 //+------------------------------------------------------------------+
-//|                    Advanced Previous Highs and Lows MT5           |
-//|                         Version 3.5 Professional                  |
-//|                    Works on All Timeframes                        |
+//| Advanced Previous Highs & Lows - MT5                             |
+//| Professional multi-timeframe indicator                          |
 //+------------------------------------------------------------------+
-
-#property copyright "Copilot - Advanced Trading Tools"
-#property version   "3.50"
 #property strict
-#property description "Professional Advanced Previous Highs and Lows - Multi Timeframe Support"
+#property version   "4.00"
+#property description "Previous completed Day/Week/Month levels for every MT5 chart timeframe"
 #property indicator_chart_window
 #property indicator_buffers 6
-#property indicator_plots 6
+#property indicator_plots   6
 
-//--- Input Parameters
-input group "=== Display Settings ==="
-input bool ShowDailyHL = true;           // Show Daily High/Low
-input bool ShowWeeklyHL = true;          // Show Weekly High/Low
-input bool ShowMonthlyHL = true;         // Show Monthly High/Low
+input group "Levels"
+input bool ShowDaily   = true;
+input bool ShowWeekly  = true;
+input bool ShowMonthly = true;
 
-input group "=== Label Settings ==="
-input bool ShowLabels = true;            // Show Price Labels
-input bool ShowLabelValues = true;       // Show Price Values on Labels
-input int LabelFontSize = 9;             // Label Font Size
-input string LabelFont = "Arial";        // Label Font Name
-input int LabelDistance = 20;            // Label Distance from Right Edge
+input group "Lines"
+input bool ShowLines = true;
+input int  LineWidth = 2;
+input ENUM_LINE_STYLE DailyStyle   = STYLE_SOLID;
+input ENUM_LINE_STYLE WeeklyStyle  = STYLE_DASH;
+input ENUM_LINE_STYLE MonthlyStyle = STYLE_DOT;
+input color DailyHighColor   = clrDodgerBlue;
+input color DailyLowColor    = clrTomato;
+input color WeeklyHighColor  = clrLimeGreen;
+input color WeeklyLowColor   = clrMagenta;
+input color MonthlyHighColor = clrGold;
+input color MonthlyLowColor  = clrDeepPink;
 
-input group "=== Daily High/Low Settings ==="
-input color DailyHighColor = clrBlue;           // Daily High Color
-input color DailyLowColor = clrRed;             // Daily Low Color
-input int DailyLineWidth = 2;                   // Daily Line Width (1-5)
-input ENUM_LINE_STYLE DailyLineStyle = STYLE_SOLID;
+input group "Labels"
+input bool ShowLabels = true;
+input bool ShowValues = true;
+input int  FontSize = 9;
+input string FontName = "Arial";
 
-input group "=== Weekly High/Low Settings ==="
-input color WeeklyHighColor = clrGreen;        // Weekly High Color
-input color WeeklyLowColor = clrMagenta;       // Weekly Low Color
-input int WeeklyLineWidth = 2;                  // Weekly Line Width (1-5)
-input ENUM_LINE_STYLE WeeklyLineStyle = STYLE_DASH;
+input group "Zones"
+input bool ShowZones = false;
+input int  ZonePoints = 20;
+input uchar ZoneTransparency = 85;
 
-input group "=== Monthly High/Low Settings ==="
-input color MonthlyHighColor = clrOrange;      // Monthly High Color
-input color MonthlyLowColor = clrPurple;       // Monthly Low Color
-input int MonthlyLineWidth = 2;                // Monthly Line Width (1-5)
-input ENUM_LINE_STYLE MonthlyLineStyle = STYLE_DOT;
+input group "Alerts"
+input bool EnableAlerts = true;
+input bool AlertOnTouch = true;
+input bool AlertOnBreakout = true;
+input bool PushNotification = false;
+input int AlertCooldownSeconds = 300;
 
-input group "=== Alert Settings ==="
-input bool EnableAlert = true;           // Enable Sound Alerts
-input bool EnableNotification = false;   // Enable Push Notifications
-input bool AlertOnBreakout = true;       // Alert on Breakout
-input bool AlertOnTouch = true;          // Alert on Touch
-input int AlertCooldown = 300;           // Alert Cooldown (seconds)
+//--- buffers
+double g_dailyHigh[], g_dailyLow[];
+double g_weeklyHigh[], g_weeklyLow[];
+double g_monthlyHigh[], g_monthlyLow[];
 
-input group "=== Advanced Settings ==="
-input bool RoundPrices = true;           // Round Prices to Tick Size
-input bool ShowExtendedLines = true;     // Extend lines to right edge
+string Prefix = "APHL4_";
+datetime LastAlert = 0;
+datetime LastAlertBar = 0;
+string LastAlertKey = "";
 
-//--- Indicator Buffers
-double DailyHighBuff[];
-double DailyLowBuff[];
-double WeeklyHighBuff[];
-double WeeklyLowBuff[];
-double MonthlyHighBuff[];
-double MonthlyLowBuff[];
-
-//--- Global Variables
-string objPrefix = "APHL_";
-int alertCount = 0;
-datetime lastAlertTime = 0;
-datetime lastDailyTime = 0;
-datetime lastWeeklyTime = 0;
-datetime lastMonthlyTime = 0;
-
-//+------------------------------------------------------------------+
-//| Initialization                                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   IndicatorSetString(INDICATOR_SHORTNAME, "Adv Prev HL v3.5");
-   
-   // Setup Daily High/Low
-   SetIndexBuffer(0, DailyHighBuff, INDICATOR_DATA);
-   PlotIndexSetInteger(0, PLOT_DRAW_TYPE, DRAW_LINE);
-   PlotIndexSetInteger(0, PLOT_LINE_STYLE, DailyLineStyle);
-   PlotIndexSetInteger(0, PLOT_LINE_WIDTH, DailyLineWidth);
-   PlotIndexSetInteger(0, PLOT_LINE_COLOR, DailyHighColor);
-   PlotIndexSetString(0, PLOT_LABEL, "Daily High");
+   IndicatorSetString(INDICATOR_SHORTNAME,"Advanced Previous H/L v4");
+   ConfigurePlot(0,g_dailyHigh,"Daily High",DailyHighColor,DailyStyle);
+   ConfigurePlot(1,g_dailyLow,"Daily Low",DailyLowColor,DailyStyle);
+   ConfigurePlot(2,g_weeklyHigh,"Weekly High",WeeklyHighColor,WeeklyStyle);
+   ConfigurePlot(3,g_weeklyLow,"Weekly Low",WeeklyLowColor,WeeklyStyle);
+   ConfigurePlot(4,g_monthlyHigh,"Monthly High",MonthlyHighColor,MonthlyStyle);
+   ConfigurePlot(5,g_monthlyLow,"Monthly Low",MonthlyLowColor,MonthlyStyle);
 
-   SetIndexBuffer(1, DailyLowBuff, INDICATOR_DATA);
-   PlotIndexSetInteger(1, PLOT_DRAW_TYPE, DRAW_LINE);
-   PlotIndexSetInteger(1, PLOT_LINE_STYLE, DailyLineStyle);
-   PlotIndexSetInteger(1, PLOT_LINE_WIDTH, DailyLineWidth);
-   PlotIndexSetInteger(1, PLOT_LINE_COLOR, DailyLowColor);
-   PlotIndexSetString(1, PLOT_LABEL, "Daily Low");
-
-   // Setup Weekly High/Low
-   SetIndexBuffer(2, WeeklyHighBuff, INDICATOR_DATA);
-   PlotIndexSetInteger(2, PLOT_DRAW_TYPE, DRAW_LINE);
-   PlotIndexSetInteger(2, PLOT_LINE_STYLE, WeeklyLineStyle);
-   PlotIndexSetInteger(2, PLOT_LINE_WIDTH, WeeklyLineWidth);
-   PlotIndexSetInteger(2, PLOT_LINE_COLOR, WeeklyHighColor);
-   PlotIndexSetString(2, PLOT_LABEL, "Weekly High");
-
-   SetIndexBuffer(3, WeeklyLowBuff, INDICATOR_DATA);
-   PlotIndexSetInteger(3, PLOT_DRAW_TYPE, DRAW_LINE);
-   PlotIndexSetInteger(3, PLOT_LINE_STYLE, WeeklyLineStyle);
-   PlotIndexSetInteger(3, PLOT_LINE_WIDTH, WeeklyLineWidth);
-   PlotIndexSetInteger(3, PLOT_LINE_COLOR, WeeklyLowColor);
-   PlotIndexSetString(3, PLOT_LABEL, "Weekly Low");
-
-   // Setup Monthly High/Low
-   SetIndexBuffer(4, MonthlyHighBuff, INDICATOR_DATA);
-   PlotIndexSetInteger(4, PLOT_DRAW_TYPE, DRAW_LINE);
-   PlotIndexSetInteger(4, PLOT_LINE_STYLE, MonthlyLineStyle);
-   PlotIndexSetInteger(4, PLOT_LINE_WIDTH, MonthlyLineWidth);
-   PlotIndexSetInteger(4, PLOT_LINE_COLOR, MonthlyHighColor);
-   PlotIndexSetString(4, PLOT_LABEL, "Monthly High");
-
-   SetIndexBuffer(5, MonthlyLowBuff, INDICATOR_DATA);
-   PlotIndexSetInteger(5, PLOT_DRAW_TYPE, DRAW_LINE);
-   PlotIndexSetInteger(5, PLOT_LINE_STYLE, MonthlyLineStyle);
-   PlotIndexSetInteger(5, PLOT_LINE_WIDTH, MonthlyLineWidth);
-   PlotIndexSetInteger(5, PLOT_LINE_COLOR, MonthlyLowColor);
-   PlotIndexSetString(5, PLOT_LABEL, "Monthly Low");
-
-   Print("✓ Advanced Previous Highs and Lows Indicator v3.5 initialized successfully");
-   Print("✓ Symbol: " + _Symbol + " | Timeframe: " + IntegerToString(_Period));
-   
+   EventSetTimer(1);
    return INIT_SUCCEEDED;
 }
 
 //+------------------------------------------------------------------+
-//| Main Calculation                                                 |
-//+------------------------------------------------------------------+
-int OnCalculate(const int rates_total,
-                const int prev_calculated,
-                const datetime &time[],
-                const double &open[],
-                const double &high[],
-                const double &low[],
-                const double &close[],
-                const long &tick_volume[],
-                const long &volume[],
-                const int &spread[])
+void ConfigurePlot(const int index,double &buffer[],const string label,
+                   const color clr,const ENUM_LINE_STYLE style)
 {
-   if (rates_total < 2)
-      return 0;
+   SetIndexBuffer(index,buffer,INDICATOR_DATA);
+   ArraySetAsSeries(buffer,true);
+   PlotIndexSetInteger(index,PLOT_DRAW_TYPE,DRAW_LINE);
+   PlotIndexSetInteger(index,PLOT_LINE_STYLE,style);
+   PlotIndexSetInteger(index,PLOT_LINE_WIDTH,MathMax(1,MathMin(5,LineWidth)));
+   PlotIndexSetInteger(index,PLOT_LINE_COLOR,clr);
+   PlotIndexSetString(index,PLOT_LABEL,label);
+   PlotIndexSetDouble(index,PLOT_EMPTY_VALUE,EMPTY_VALUE);
+}
 
-   int limit;
-   if (prev_calculated == 0)
-      limit = rates_total - 1;
-   else
-      limit = rates_total - prev_calculated;
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,const int prev_calculated,
+                const datetime &time[],const double &open[],
+                const double &high[],const double &low[],
+                const double &close[],const long &tick_volume[],
+                const long &volume[],const int &spread[])
+{
+   if(rates_total < 2) return 0;
 
-   // Calculate all bars
-   for (int i = limit; i >= 0; i--)
+   ArraySetAsSeries(time,true);
+   int first = (prev_calculated==0 ? rates_total-1 : rates_total-prev_calculated+1);
+   if(first > rates_total-1) first = rates_total-1;
+
+   for(int i=first; i>=0; i--)
    {
-      // Daily High/Low
-      if (ShowDailyHL)
+      if(ShowDaily)
       {
-         DailyHighBuff[i] = GetPreviousHigh(i, PERIOD_D1);
-         DailyLowBuff[i] = GetPreviousLow(i, PERIOD_D1);
+         g_dailyHigh[i]=PreviousHigh(i,PERIOD_D1);
+         g_dailyLow[i] =PreviousLow(i,PERIOD_D1);
       }
-      else
-      {
-         DailyHighBuff[i] = 0;
-         DailyLowBuff[i] = 0;
-      }
+      else { g_dailyHigh[i]=EMPTY_VALUE; g_dailyLow[i]=EMPTY_VALUE; }
 
-      // Weekly High/Low
-      if (ShowWeeklyHL)
+      if(ShowWeekly)
       {
-         WeeklyHighBuff[i] = GetPreviousHigh(i, PERIOD_W1);
-         WeeklyLowBuff[i] = GetPreviousLow(i, PERIOD_W1);
+         g_weeklyHigh[i]=PreviousHigh(i,PERIOD_W1);
+         g_weeklyLow[i] =PreviousLow(i,PERIOD_W1);
       }
-      else
-      {
-         WeeklyHighBuff[i] = 0;
-         WeeklyLowBuff[i] = 0;
-      }
+      else { g_weeklyHigh[i]=EMPTY_VALUE; g_weeklyLow[i]=EMPTY_VALUE; }
 
-      // Monthly High/Low
-      if (ShowMonthlyHL)
+      if(ShowMonthly)
       {
-         MonthlyHighBuff[i] = GetPreviousHigh(i, PERIOD_MN1);
-         MonthlyLowBuff[i] = GetPreviousLow(i, PERIOD_MN1);
+         g_monthlyHigh[i]=PreviousHigh(i,PERIOD_MN1);
+         g_monthlyLow[i] =PreviousLow(i,PERIOD_MN1);
       }
-      else
-      {
-         MonthlyHighBuff[i] = 0;
-         MonthlyLowBuff[i] = 0;
-      }
+      else { g_monthlyHigh[i]=EMPTY_VALUE; g_monthlyLow[i]=EMPTY_VALUE; }
    }
 
-   // Update labels and check alerts on new bar
-   if (prev_calculated < rates_total)
-   {
-      if (ShowLabels)
-         UpdateLabels();
-      
-      if (EnableAlert)
-         CheckAlerts();
-   }
-
+   // Objects and alerts are updated on every tick, not only on a new bar.
+   UpdateObjects();
+   CheckAlerts();
    return rates_total;
 }
 
 //+------------------------------------------------------------------+
-//| Get Previous High for specific timeframe                         |
+//| Series indexes increase into the past: current period is shift 0,|
+//| therefore the previous completed period is shift + 1.            |
 //+------------------------------------------------------------------+
-double GetPreviousHigh(int barIndex, ENUM_TIMEFRAMES tf)
+double PreviousHigh(const int chartShift,const ENUM_TIMEFRAMES tf)
 {
-   if (barIndex >= Bars(_Symbol, _Period))
-      return 0;
+   datetime t=iTime(_Symbol,_Period,chartShift);
+   if(t<=0) return EMPTY_VALUE;
+   int currentShift=iBarShift(_Symbol,tf,t,false);
+   if(currentShift<0) return EMPTY_VALUE;
+   int previousShift=currentShift+1;
+   if(Bars(_Symbol,tf)<=previousShift) return EMPTY_VALUE;
+   double value=iHigh(_Symbol,tf,previousShift);
+   return (value>0 ? NormalizeDouble(value,_Digits) : EMPTY_VALUE);
+}
 
-   datetime currentBarTime = iTime(_Symbol, _Period, barIndex);
-   if (currentBarTime == 0)
-      return 0;
-
-   // Get bar shift on target timeframe
-   int tfBarShift = iBarShift(_Symbol, tf, currentBarTime, false);
-   
-   if (tfBarShift < 1)
-      return 0;
-
-   // Get high of previous bar on target timeframe
-   double high = iHigh(_Symbol, tf, tfBarShift - 1);
-   
-   if (RoundPrices)
-      high = NormalizeDouble(high, _Digits);
-
-   return high;
+double PreviousLow(const int chartShift,const ENUM_TIMEFRAMES tf)
+{
+   datetime t=iTime(_Symbol,_Period,chartShift);
+   if(t<=0) return EMPTY_VALUE;
+   int currentShift=iBarShift(_Symbol,tf,t,false);
+   if(currentShift<0) return EMPTY_VALUE;
+   int previousShift=currentShift+1;
+   if(Bars(_Symbol,tf)<=previousShift) return EMPTY_VALUE;
+   double value=iLow(_Symbol,tf,previousShift);
+   return (value>0 ? NormalizeDouble(value,_Digits) : EMPTY_VALUE);
 }
 
 //+------------------------------------------------------------------+
-//| Get Previous Low for specific timeframe                          |
-//+------------------------------------------------------------------+
-double GetPreviousLow(int barIndex, ENUM_TIMEFRAMES tf)
+void UpdateObjects()
 {
-   if (barIndex >= Bars(_Symbol, _Period))
-      return 0;
+   if(ShowLines)
+   {
+      DrawLevel("D_H",g_dailyHigh[0],DailyHighColor,DailyStyle);
+      DrawLevel("D_L",g_dailyLow[0],DailyLowColor,DailyStyle);
+      DrawLevel("W_H",g_weeklyHigh[0],WeeklyHighColor,WeeklyStyle);
+      DrawLevel("W_L",g_weeklyLow[0],WeeklyLowColor,WeeklyStyle);
+      DrawLevel("M_H",g_monthlyHigh[0],MonthlyHighColor,MonthlyStyle);
+      DrawLevel("M_L",g_monthlyLow[0],MonthlyLowColor,MonthlyStyle);
+   }
+   else
+   {
+      DeleteObject("D_H"); DeleteObject("D_L"); DeleteObject("W_H");
+      DeleteObject("W_L"); DeleteObject("M_H"); DeleteObject("M_L");
+   }
 
-   datetime currentBarTime = iTime(_Symbol, _Period, barIndex);
-   if (currentBarTime == 0)
-      return 0;
+   if(ShowLabels)
+   {
+      DrawLabel("D_H_TXT","PDH",g_dailyHigh[0],DailyHighColor);
+      DrawLabel("D_L_TXT","PDL",g_dailyLow[0],DailyLowColor);
+      DrawLabel("W_H_TXT","PWH",g_weeklyHigh[0],WeeklyHighColor);
+      DrawLabel("W_L_TXT","PWL",g_weeklyLow[0],WeeklyLowColor);
+      DrawLabel("M_H_TXT","PMH",g_monthlyHigh[0],MonthlyHighColor);
+      DrawLabel("M_L_TXT","PML",g_monthlyLow[0],MonthlyLowColor);
+   }
+   else
+   {
+      DeleteObject("D_H_TXT"); DeleteObject("D_L_TXT");
+      DeleteObject("W_H_TXT"); DeleteObject("W_L_TXT");
+      DeleteObject("M_H_TXT"); DeleteObject("M_L_TXT");
+   }
 
-   // Get bar shift on target timeframe
-   int tfBarShift = iBarShift(_Symbol, tf, currentBarTime, false);
-   
-   if (tfBarShift < 1)
-      return 0;
-
-   // Get low of previous bar on target timeframe
-   double low = iLow(_Symbol, tf, tfBarShift - 1);
-   
-   if (RoundPrices)
-      low = NormalizeDouble(low, _Digits);
-
-   return low;
+   if(ShowZones)
+   {
+      DrawZone("D_ZONE",g_dailyHigh[0],g_dailyLow[0],DailyHighColor);
+      DrawZone("W_ZONE",g_weeklyHigh[0],g_weeklyLow[0],WeeklyHighColor);
+      DrawZone("M_ZONE",g_monthlyHigh[0],g_monthlyLow[0],MonthlyHighColor);
+   }
+   else { DeleteObject("D_ZONE"); DeleteObject("W_ZONE"); DeleteObject("M_ZONE"); }
+   ChartRedraw(0);
 }
 
 //+------------------------------------------------------------------+
-//| Update Labels                                                    |
-//+------------------------------------------------------------------+
-void UpdateLabels()
+void DrawLevel(const string id,const double price,const color clr,const ENUM_LINE_STYLE style)
 {
-   if (Bars(_Symbol, _Period) < 2)
-      return;
-
-   double currentClose = iClose(_Symbol, _Period, 0);
-   datetime currentTime = iTime(_Symbol, _Period, 0);
-
-   // Daily Labels
-   if (ShowDailyHL)
-   {
-      double dailyHigh = DailyHighBuff[0];
-      double dailyLow = DailyLowBuff[0];
-
-      if (dailyHigh > 0)
-      {
-         CreateLabel("DH", dailyHigh, "DH", DailyHighColor);
-      }
-
-      if (dailyLow > 0)
-      {
-         CreateLabel("DL", dailyLow, "DL", DailyLowColor);
-      }
-   }
-
-   // Weekly Labels
-   if (ShowWeeklyHL)
-   {
-      double weeklyHigh = WeeklyHighBuff[0];
-      double weeklyLow = WeeklyLowBuff[0];
-
-      if (weeklyHigh > 0)
-      {
-         CreateLabel("WH", weeklyHigh, "WH", WeeklyHighColor);
-      }
-
-      if (weeklyLow > 0)
-      {
-         CreateLabel("WL", weeklyLow, "WL", WeeklyLowColor);
-      }
-   }
-
-   // Monthly Labels
-   if (ShowMonthlyHL)
-   {
-      double monthlyHigh = MonthlyHighBuff[0];
-      double monthlyLow = MonthlyLowBuff[0];
-
-      if (monthlyHigh > 0)
-      {
-         CreateLabel("MH", monthlyHigh, "MH", MonthlyHighColor);
-      }
-
-      if (monthlyLow > 0)
-      {
-         CreateLabel("ML", monthlyLow, "ML", MonthlyLowColor);
-      }
-   }
+   string name=Prefix+id;
+   if(price==EMPTY_VALUE || price<=0) { DeleteObject(id); return; }
+   if(ObjectFind(0,name)<0) ObjectCreate(0,name,OBJ_HLINE,0,0,price);
+   ObjectSetDouble(0,name,OBJPROP_PRICE,price);
+   ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,name,OBJPROP_STYLE,style);
+   ObjectSetInteger(0,name,OBJPROP_WIDTH,MathMax(1,MathMin(5,LineWidth)));
+   ObjectSetInteger(0,name,OBJPROP_BACK,true);
+   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
 }
 
 //+------------------------------------------------------------------+
-//| Create or Update Label                                           |
-//+------------------------------------------------------------------+
-void CreateLabel(string name, double price, string text, color textColor)
+void DrawLabel(const string id,const string text,const double price,const color clr)
 {
-   string objName = objPrefix + name;
-   
-   // Delete old label
-   ObjectDelete(0, objName);
-
-   // Create new text object
-   if (ObjectCreate(0, objName, OBJ_TEXT, 0, TimeCurrent(), price))
-   {
-      string displayText = text;
-      if (ShowLabelValues)
-         displayText = text + " " + DoubleToString(price, _Digits);
-
-      ObjectSetString(0, objName, OBJPROP_TEXT, displayText);
-      ObjectSetInteger(0, objName, OBJPROP_COLOR, textColor);
-      ObjectSetInteger(0, objName, OBJPROP_FONTSIZE, LabelFontSize);
-      ObjectSetString(0, objName, OBJPROP_FONT, LabelFont);
-      ObjectSetDouble(0, objName, OBJPROP_PRICE, price);
-      ObjectSetInteger(0, objName, OBJPROP_ANCHOR, ANCHOR_LEFT_CENTER);
-      ObjectSetInteger(0, objName, OBJPROP_BACK, false);
-      ObjectSetInteger(0, objName, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, objName, OBJPROP_HIDDEN, true);
-   }
+   string name=Prefix+id;
+   if(price==EMPTY_VALUE || price<=0) { DeleteObject(id); return; }
+   datetime t=iTime(_Symbol,_Period,0);
+   if(t<=0) return;
+   if(ObjectFind(0,name)<0) ObjectCreate(0,name,OBJ_TEXT,0,t,price);
+   ObjectMove(0,name,0,t,price);
+   string value=text+(ShowValues ? " "+DoubleToString(price,_Digits) : "");
+   ObjectSetString(0,name,OBJPROP_TEXT,value);
+   ObjectSetString(0,name,OBJPROP_FONT,FontName);
+   ObjectSetInteger(0,name,OBJPROP_FONTSIZE,MathMax(6,FontSize));
+   ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,name,OBJPROP_ANCHOR,ANCHOR_LEFT);
+   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
 }
 
 //+------------------------------------------------------------------+
-//| Check for Alert Conditions                                       |
+void DrawZone(const string id,const double highPrice,const double lowPrice,const color clr)
+{
+   if(highPrice==EMPTY_VALUE || lowPrice==EMPTY_VALUE) { DeleteObject(id); return; }
+   string name=Prefix+id;
+   datetime right=iTime(_Symbol,_Period,0);
+   int seconds=PeriodSeconds(_Period);
+   if(seconds<=0) seconds=60;
+   datetime left=right-(datetime)(seconds*2);
+   double pad=ZonePoints*_Point;
+   if(ObjectFind(0,name)<0) ObjectCreate(0,name,OBJ_RECTANGLE,0,left,highPrice+pad,right,lowPrice-pad);
+   ObjectMove(0,name,0,left,highPrice+pad);
+   ObjectMove(0,name,1,right,lowPrice-pad);
+   ObjectSetInteger(0,name,OBJPROP_COLOR,ColorToARGB(clr,ZoneTransparency));
+   ObjectSetInteger(0,name,OBJPROP_FILL,true);
+   ObjectSetInteger(0,name,OBJPROP_BACK,true);
+   ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
+}
+
 //+------------------------------------------------------------------+
 void CheckAlerts()
 {
-   if (Bars(_Symbol, _Period) < 2)
-      return;
-
-   double currentClose = iClose(_Symbol, _Period, 0);
-   double previousClose = iClose(_Symbol, _Period, 1);
-   double currentHigh = iHigh(_Symbol, _Period, 0);
-   double currentLow = iLow(_Symbol, _Period, 0);
-
-   // Daily Alerts
-   if (ShowDailyHL)
-   {
-      double dailyHigh = DailyHighBuff[0];
-      double dailyLow = DailyLowBuff[0];
-
-      if (dailyHigh > 0)
-      {
-         // Breakout up
-         if (AlertOnBreakout && currentClose > dailyHigh && previousClose <= dailyHigh)
-            SendAlert("Daily High Breakout at " + DoubleToString(dailyHigh, _Digits));
-
-         // Touch
-         if (AlertOnTouch && currentHigh >= dailyHigh && currentLow < dailyHigh)
-            SendAlert("Daily High Touched at " + DoubleToString(dailyHigh, _Digits));
-      }
-
-      if (dailyLow > 0)
-      {
-         // Breakout down
-         if (AlertOnBreakout && currentClose < dailyLow && previousClose >= dailyLow)
-            SendAlert("Daily Low Breakout at " + DoubleToString(dailyLow, _Digits));
-
-         // Touch
-         if (AlertOnTouch && currentLow <= dailyLow && currentHigh > dailyLow)
-            SendAlert("Daily Low Touched at " + DoubleToString(dailyLow, _Digits));
-      }
-   }
-
-   // Weekly Alerts
-   if (ShowWeeklyHL)
-   {
-      double weeklyHigh = WeeklyHighBuff[0];
-      double weeklyLow = WeeklyLowBuff[0];
-
-      if (weeklyHigh > 0)
-      {
-         if (AlertOnBreakout && currentClose > weeklyHigh && previousClose <= weeklyHigh)
-            SendAlert("Weekly High Breakout at " + DoubleToString(weeklyHigh, _Digits));
-
-         if (AlertOnTouch && currentHigh >= weeklyHigh && currentLow < weeklyHigh)
-            SendAlert("Weekly High Touched at " + DoubleToString(weeklyHigh, _Digits));
-      }
-
-      if (weeklyLow > 0)
-      {
-         if (AlertOnBreakout && currentClose < weeklyLow && previousClose >= weeklyLow)
-            SendAlert("Weekly Low Breakout at " + DoubleToString(weeklyLow, _Digits));
-
-         if (AlertOnTouch && currentLow <= weeklyLow && currentHigh > weeklyLow)
-            SendAlert("Weekly Low Touched at " + DoubleToString(weeklyLow, _Digits));
-      }
-   }
-
-   // Monthly Alerts
-   if (ShowMonthlyHL)
-   {
-      double monthlyHigh = MonthlyHighBuff[0];
-      double monthlyLow = MonthlyLowBuff[0];
-
-      if (monthlyHigh > 0)
-      {
-         if (AlertOnBreakout && currentClose > monthlyHigh && previousClose <= monthlyHigh)
-            SendAlert("Monthly High Breakout at " + DoubleToString(monthlyHigh, _Digits));
-
-         if (AlertOnTouch && currentHigh >= monthlyHigh && currentLow < monthlyHigh)
-            SendAlert("Monthly High Touched at " + DoubleToString(monthlyHigh, _Digits));
-      }
-
-      if (monthlyLow > 0)
-      {
-         if (AlertOnBreakout && currentClose < monthlyLow && previousClose >= monthlyLow)
-            SendAlert("Monthly Low Breakout at " + DoubleToString(monthlyLow, _Digits));
-
-         if (AlertOnTouch && currentLow <= monthlyLow && currentHigh > monthlyLow)
-            SendAlert("Monthly Low Touched at " + DoubleToString(monthlyLow, _Digits));
-      }
-   }
+   if(!EnableAlerts || Bars(_Symbol,_Period)<2) return;
+   double c0=iClose(_Symbol,_Period,0), c1=iClose(_Symbol,_Period,1);
+   double h=iHigh(_Symbol,_Period,0), l=iLow(_Symbol,_Period,0);
+   CheckOne("PDH",g_dailyHigh[0],c0,c1,h,l,true);
+   CheckOne("PDL",g_dailyLow[0],c0,c1,h,l,false);
+   CheckOne("PWH",g_weeklyHigh[0],c0,c1,h,l,true);
+   CheckOne("PWL",g_weeklyLow[0],c0,c1,h,l,false);
+   CheckOne("PMH",g_monthlyHigh[0],c0,c1,h,l,true);
+   CheckOne("PML",g_monthlyLow[0],c0,c1,h,l,false);
 }
 
-//+------------------------------------------------------------------+
-//| Send Alert                                                       |
-//+------------------------------------------------------------------+
-void SendAlert(string message)
+void CheckOne(const string tag,const double level,const double c0,const double c1,
+              const double h,const double l,const bool isHigh)
 {
-   // Cooldown check
-   if (TimeCurrent() - lastAlertTime < AlertCooldown)
-      return;
+   if(level==EMPTY_VALUE || level<=0) return;
+   datetime bar=iTime(_Symbol,_Period,0);
+   if(AlertOnBreakout)
+   {
+      bool crossed=(isHigh ? (c0>level && c1<=level) : (c0<level && c1>=level));
+      if(crossed) FireAlert(tag+" breakout",level,bar);
+   }
+   if(AlertOnTouch && h>=level && l<=level)
+      FireAlert(tag+" touched",level,bar);
+}
 
-   lastAlertTime = TimeCurrent();
-   alertCount++;
-
-   string fullMessage = "⚠️ APHL Alert #" + IntegerToString(alertCount) + 
-                       "\n" + _Symbol + " " + IntegerToString(_Period) + "m" +
-                       "\n" + message + 
-                       "\n" + TimeToString(TimeCurrent());
-
-   // Sound Alert
-   Alert(fullMessage);
-
-   // Push Notification
-   if (EnableNotification)
-      SendNotification(fullMessage);
-
-   // Log
-   Print(fullMessage);
+void FireAlert(const string text,const double level,const datetime bar)
+{
+   string key=text+IntegerToString((long)bar);
+   if(key==LastAlertKey) return;
+   if(TimeCurrent()-LastAlert<AlertCooldownSeconds) return;
+   LastAlert=TimeCurrent(); LastAlertKey=key;
+   string msg=_Symbol+" "+text+" @ "+DoubleToString(level,_Digits);
+   Alert(msg);
+   Print("[APHL] "+msg);
+   if(PushNotification) SendNotification(msg);
 }
 
 //+------------------------------------------------------------------+
-//| Deinitialization                                                 |
-//+------------------------------------------------------------------+
+void DeleteObject(const string id)
+{
+   ObjectDelete(0,Prefix+id);
+}
+
+void OnTimer()
+{
+   // Timer keeps the levels/labels current even when ticks are sparse.
+   if(Bars(_Symbol,_Period)>0) UpdateObjects();
+}
+
 void OnDeinit(const int reason)
 {
-   // Delete all indicator objects
-   for (int i = ObjectsTotal(0) - 1; i >= 0; i--)
+   EventKillTimer();
+   for(int i=ObjectsTotal(0)-1;i>=0;i--)
    {
-      string objName = ObjectName(0, i);
-      if (StringFind(objName, objPrefix) == 0)
-         ObjectDelete(0, objName);
-   }
-
-   string reasonText = GetReasonText(reason);
-   Print("✓ Advanced Previous Highs and Lows Indicator removed. Reason: " + reasonText);
-}
-
-//+------------------------------------------------------------------+
-//| Get Deinitialization Reason Text                                 |
-//+------------------------------------------------------------------+
-string GetReasonText(int reason)
-{
-   switch (reason)
-   {
-      case REASON_CHARTCHANGE:    return "Chart Changed";
-      case REASON_CHARTCLOSE:     return "Chart Closed";
-      case REASON_PARAMETERS:     return "Parameters Changed";
-      case REASON_RECOMPILE:      return "Recompiled";
-      case REASON_REMOVE:         return "Removed";
-      case REASON_TEMPLATE:       return "Template Changed";
-      case REASON_INITFAILED:     return "Init Failed";
-      case REASON_ACCOUNT:        return "Account Changed";
-      default:                    return "Unknown (" + IntegerToString(reason) + ")";
+      string name=ObjectName(0,i);
+      if(StringFind(name,Prefix)==0) ObjectDelete(0,name);
    }
 }
-
 //+------------------------------------------------------------------+
